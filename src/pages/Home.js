@@ -32,7 +32,7 @@ const Home = () => {
                 setCurrentPage(response.data.pageNumber);
             })
             .catch((error) => {
-                toast.error("Error fetching paginated users");
+                toast.error("Error fetching users " + error);
                 console.error(error);
             });
     };
