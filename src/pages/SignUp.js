@@ -3,10 +3,13 @@ import Base from "../components/Base";
 import { toast, ToastContainer } from "react-toastify";
 import axios from "axios";
 import base_url from "../services/helper";
+import OpenedEye from "../SVGs/OpenedEye.svg";
+import ClosedEye from "../SVGs/ClosedEye.svg";
 
 export default function SignUp() {
   const [user, setUser] = useState({});
   const [image, setImage] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
 
   const [error, setError] = useState({
     errors: {},
@@ -20,48 +23,80 @@ export default function SignUp() {
   };
 
   // Creating function to post data on server
-  const postDatatoServer = (data) => {
-    axios
-      .post(`${base_url}/api/users`, data)
-      .then((response) => {
-        if (image) {
-          uploadPostImage(image, response.data.id)
-            .then(() => {
-              toast.success("Image Uploaded!");
-            })
-            .catch((error) => {
-              toast.error("Error in Uploading Image !! ");
-              console.error(error);
-              // console.log(error.response.data);
-            });
-        }
+  // const postDatatoServer = (data) => {
+  //   axios
+  //     .post(`${base_url}/api/v1/auth/register`, data)
+  //     .then((response) => {
+  //       toast.success("User Registered Successfully! User ID: " + response.data.id);
+  //       if (image) {
+  //         uploadPostImage(image, response.data.id)
+  //           .then(() => {
+  //             toast.success("Image Uploaded!");
+  //           })
+  //           .catch((error) => {
+  //             toast.error("Error in Uploading Image !! ");
+  //             console.error(error);
+  //             // console.log(error.response.data);
+  //           });
+  //       }
 
-        if (!error.isError) {
+  //       if (!error.isError) {
           
-          toast.success("User Registered Successfully! User ID: " + response.data.id);
-          setUser({});
-          setImage({});
-        }
-      })
-      .catch((error) => {
-        console.log("Error! Something went wrong");
-        console.log(error);
+  //         console.log(response);
+  //         console.log("success log")
+  //         setUser({});
+  //         setImage({});
+  //       }
+  //     })
+  //     .catch((error) => {
+  //       console.log("Error! Something went wrong");
+  //       console.log(error);
 
-        if (error.response && error.response.data) {
-          setError({
-            errors: error.response.data,
-            isError: true,
-          });
+  //       if (error.response && error.response.data) {
+  //         setError({
+  //           errors: error.response.data,
+  //           isError: true,
+  //         });
+  //       }
+  //     });
+  // };
+
+  const postDatatoServer = async (data) => {
+    try {
+      const response = await axios.post(`${base_url}/api/v1/auth/register`, data);
+      toast.success("User Registered Successfully! User ID: " + response.data.id);
+  
+      if (image) {
+        try {
+          await uploadPostImage(image, response.data.id);
+          toast.success("Image Uploaded Successfully!");
+        } catch (imageUploadError) {
+          toast.error("Error in Uploading Image!");
+          console.error(imageUploadError);
         }
-      });
+      }
+  
+      setUser({});
+      setImage({});
+      setError({ errors: {}, isError: false });
+    } catch (registrationError) {
+      console.error("Error during registration:", registrationError);
+      if (registrationError.response && registrationError.response.data) {
+        setError({
+          errors: registrationError.response.data,
+          isError: true,
+        });
+      }
+    }
   };
+  
 
   const uploadPostImage = async (image, id) => {
     let formData = new FormData();
     formData.append("image", image);
 
     const response = await axios
-      .post(`${base_url}/api/users/image/${id}`, formData);
+      .post(`${base_url}/api/v1/users/image/${id}`, formData);
     return response.data;
   };
 
@@ -86,22 +121,22 @@ export default function SignUp() {
             {/* UserName Field */}
             <div>
               <label htmlFor="name" className="block text-sm font-medium leading-6 text-gray-900">
-                User Name
+                Name
               </label>
               <div className="mt-2">
                 <input
-                  id="username"
-                  name="username"
+                  id="name"
+                  name="name"
                   type="text"
                   onChange={(e) => {
-                    setUser({ ...user, userName: e.target.value });
+                    setUser({ ...user, name: e.target.value });
                   }}
-                  value={user.userName || ""}
+                  value={user.name || ""}
                   className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 pl-3"
                   placeholder="Enter your User Name"
                 />
-                {error.errors?.userName && (
-                  <p className="mt-2 text-sm text-red-600">{error.errors.userName}</p>
+                {error.errors?.name && (
+                  <p className="mt-2 text-sm text-red-600">{error.errors.name}</p>
                 )}
               </div>
             </div>
@@ -135,23 +170,27 @@ export default function SignUp() {
                   Password
                 </label>
               </div>
-              <div className="mt-2">
+              <div className="mt-2 relative">
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   onChange={(e) => {
                     setUser({ ...user, password: e.target.value });
                   }}
                   value={user.password || ""}
-                  className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 pl-3"
+                  className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 pl-3 pr-10"
                   placeholder="Enter your Secure Password"
                 />
+                {/* Eye Icon */}
+                <img src={showPassword ? OpenedEye : ClosedEye} alt="" srcset="" onClick={() => setShowPassword(!showPassword)} className="absolute h-6 right-2 top-2 cursor-pointer flex items-center px-3 transition-transform transform hover:scale-110 active:scale-90 inset-y-0" />
+                
                 {error.errors?.password && (
                   <p className="mt-2 text-sm text-red-600">{error.errors.password}</p>
                 )}
               </div>
             </div>
+
 
             {/* File Upload Field */}
             <div>

@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from "react";
 import Base from "../components/Base";
-import base_url from "../services/helper";
+import base_url, { privateAxios } from "../services/helper";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { getCurrentUserDetail, isLoggedIn } from "../auth";
+import { jwtDecode } from "jwt-decode";
+
 
 const Home = () => {
     const [user, setUser] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [editId, setEditId] = useState(null);
     const [image, setImage] = useState({});
-    const [editData, setEditData] = useState({ userName: '', email: '', password: '', imageName: '' });
+    const [editData, setEditData] = useState({ name: '', email: '', password: '', imageName: '' });
     const [selectedImage, setSelectedImage] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -21,11 +24,19 @@ const Home = () => {
 
     const [currentPage, setCurrentPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
-    const [pageSize, setPageSize] = useState(4); 
+    const [pageSize, setPageSize] = useState(5); 
+
+    const [login, setlogin] = useState(null);
+    
+
+    useEffect(() => {
+        setUser(getCurrentUserDetail());       
+        setlogin(isLoggedIn());
+    }, []);
 
     // Function to fetch paginated user data from server
     const fetchPaginatedUsers = (pageNumber = 0) => {
-        axios.get(`${base_url}/api/users?pageNumber=${pageNumber}&pageSize=${pageSize}`)
+        axios.get(`${base_url}/api/v1/users?pageNumber=${pageNumber}&pageSize=${pageSize}`)
             .then((response) => {
                 setUser(response.data.content);
                 setTotalPages(response.data.totalPages);
@@ -39,7 +50,7 @@ const Home = () => {
 
     // Function to fetch search results from server
     const getAllUserDataFromServer = () => {
-        const url = `${base_url}/api/users/search?keyword=${searchQuery}`;
+        const url = `${base_url}/api/v1/users/search?keyword=${searchQuery}`;
         axios.get(url)
             .then((response) => {
                 setUser(response.data);
@@ -71,20 +82,19 @@ const Home = () => {
 
     // Delete user function
     const deleteUser = (id) => {
-        axios.delete(`${base_url}/api/users/${id}`).then((response) => {
+        privateAxios.delete(`${base_url}/api/v1/users/${id}`).then((response) => {
             toast.success("User removed Successfully");
             setUser(user.filter((u) => u.id !== id));
             console.log(response.data);
         }).catch((error) => {
-            toast.error("User not removed! Server Error");
-            console.error(error.data);
+            toast.error("User not removed! Server Error " + error.message);
+            console.error(error);
         });
     };
 
-
     // Update user function
     const updateUserData = (id) => {
-        axios.put(`${base_url}/api/users/${id}`, editData)
+        privateAxios.put(`${base_url}/api/v1/users/${id}`, editData)
             .then((response) => {
                 if (image) {
                     uploadUpdatedImage(image, response.data.id)
@@ -100,12 +110,19 @@ const Home = () => {
                     toast.success("User updated successfully");
                     setUser(user.map((u) => (u.id === id ? { ...u, ...editData } : u)));
                     setEditId(null);
-                    console.log(response.data);
                 }
             })
             .catch((error) => {
-                toast.error("User not updated! Server Error");
-                console.error(error.response.data);
+                toast.error(error.response?.data?.name 
+                    ? error.response.data.name 
+                    : error.response?.data?.email 
+                        ? error.response.data.email 
+                        : error.response?.data?.password 
+                            ? error.response.data.password 
+                            : error.response?.data?.imageName
+                                ? error.response.data.imageName
+                                : error.response?.data?.message || "User not updated! Server Error " + error.message);
+                console.error(error);
 
                 if (error.response && error.response.data) {
                     setError({
@@ -119,8 +136,12 @@ const Home = () => {
 
     // Handle edit button click
     const handleEditClick = (user) => {
+        if (!isLoggedIn()) {
+            toast.error("Need to login first !!");
+            return
+        }
         setEditId(user.id);
-        setEditData({ userName: user.userName, email: user.email, password: user.password, imageName: user.imageName });
+        setEditData({ name: user.name, email: user.email, password: user.password, imageName: user.imageName });
     };
 
     // Handle input change
@@ -136,8 +157,8 @@ const Home = () => {
         let formData = new FormData();
         formData.append("image", image);
     
-        const response = await axios
-          .put(`${base_url}/api/users/image/update/${id}`, formData);
+        const response = await privateAxios
+          .put(`${base_url}/api/v1/users/image/update/${id}`, formData);
         return response.data;
     };
     
@@ -155,7 +176,7 @@ const Home = () => {
         setIsModalOpen(true);
 
         // Fetch the image as a Blob
-        axios.get(`${base_url}/api/users/image/${imageName}`, {
+        axios.get(`${base_url}/api/v1/users/image/${imageName}`, {
             responseType: 'blob' // This makes sure the response is a Blob
         })
         .then((response) => {
@@ -201,120 +222,131 @@ const Home = () => {
                 </div>
             </div>
             <div className="flex justify-center">
-                <table className="table-auto w-300 border-collapse border border-gray-300 mx-auto">
-                    <thead>
-                    <tr className="bg-gray-100">
-                        <th className="border border-gray-300 p-4 text-left">Username</th>
-                        <th className="border border-gray-300 p-4 text-left">Email</th>
-                        <th className="border border-gray-300 p-4 text-left">Password</th>
-                        <th className="border border-gray-300 p-4 text-left">Images</th>
-                        <th className="border border-gray-300 p-4 text-left">Actions</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {user && user.length > 0 ? (user.map((u, index) => (
-                        <tr key={u.id} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                            <td className="border border-gray-300 p-4">
-                                {editId === u.id ? (
-                                    <input
-                                        type="text"
-                                        name="userName"
-                                        value={editData.userName}
-                                        onChange={handleInputChange}
-                                        className="border p-2"
-                                    />
-                                ) : (
-                                    u.userName
-                                )}
-                            </td>
-                            <td className="border border-gray-300 p-4">
-                                {editId === u.id ? (
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        value={editData.email}
-                                        onChange={handleInputChange}
-                                        className="border p-2"
-                                    />
-                                ) : (
-                                    u.email
-                                )}
-                            </td>
-                            <td className="border border-gray-300 p-4">
-                                {editId === u.id ? (
-                                    <input
-                                        type="password"
-                                        name="password"
-                                        value={editData.password}
-                                        onChange={handleInputChange}
-                                        className="border p-2"
-                                    />
-                                ) : (
-                                    u.password
-                                )}
-                            </td>
-                            <td className="border border-gray-300 p-4">
-                                {editId === u.id ? (
-                                    <input
-                                        type="file"
-                                        name="imageName"
-                                        onChange={handleFileChange}
-                                        className="border p-2"
-                                    />
-                                ) : (
-                                    <img
-                                        src={`${base_url}/api/users/image/${u.imageName}`}
-                                        className="h-16 w-16 object-cover rounded cursor-pointer"
-                                        alt={`${u.imageName}`}
-                                        onClick={() => openImageModal(u.imageName)}
-                                    />
-                                )}
-                            </td>
-                            <td className="border border-gray-300 p-4 space-x-2">
-                                {editId === u.id ? (
-                                    <>
-                                        <button
-                                            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
-                                            onClick={() => updateUserData(u.id)}
-                                        >
-                                            Save
-                                        </button>
-                                        <button
-                                            className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
-                                            onClick={() => setEditId(null)}
-                                        >
-                                            Cancel
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <button
-                                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                            onClick={() => handleEditClick(u)}
-                                        >
-                                            Update
-                                        </button>
-                                        <button
-                                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                            onClick={() => deleteUser(u.id)}
-                                        >
-                                            Delete
-                                        </button>
-                                    </>
-                                )}
-                            </td>
-                        </tr>
-                    ))
-                        ) : (
+                <div className="w-[60%] border border-gray-300">
+                    <div className="overflow-y-auto max-h-96">
+                        <table className="table-auto w-full border-collapse">
+                            <thead className="sticky top-0 bg-gray-100 z-10">
                                 <tr>
-                                    <td colSpan="5" className="text-center p-4">No data available</td>
+                                    <th className="border border-gray-300 p-4 text-left">Name</th>
+                                    <th className="border border-gray-300 p-4 text-left">Email</th>
+                                    <th className="border border-gray-300 p-4 text-left">Password</th>
+                                    <th className="border border-gray-300 p-4 text-left">Images</th>
+                                    <th className="border border-gray-300 p-4 text-left">Actions</th>
                                 </tr>
-                    )}
-                    </tbody>
-                </table>
+                            </thead>
+                            <tbody>
+                                {user && user.length > 0 ? (
+                                    user.map((u, index) => (
+                                        <tr key={u.id} className={`${index % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                                        <td className="border border-gray-300 p-4">
+                                            {editId === u.id ? (
+                                                <input
+                                                type="text"
+                                                name="name"
+                                                value={editData.name}
+                                                onChange={(e) => handleInputChange(e)}
+                                                className="border p-2 w-full"
+                                                />
+                                            ) : (
+                                                u.name
+                                            )}
+                                        </td>
+                                        <td className="border border-gray-300 p-4">
+                                            {editId === u.id ? (
+                                                <input
+                                                    type="email"
+                                                    name="email"
+                                                    value={editData.email}
+                                                    onChange={(e) => handleInputChange(e)}
+                                                    className="border p-2 w-full"
+                                                />
+                                            ) : (
+                                                u.email
+                                            )}
+                                        </td>
+                                        <td className="border border-gray-300 p-4">
+                                            {editId === u.id ? (
+                                                <input
+                                                    type="password"
+                                                    name="password"
+                                                    value={editData.password}
+                                                    onChange={(e) => handleInputChange(e)}
+                                                    className="border p-2 w-full"
+                                                />
+                                            ) : (
+                                                u.password
+                                            )}
+                                        </td>
+                                        <td className="border border-gray-300 p-4">
+                                            {editId === u.id ? (
+                                                <input
+                                                    type="file"
+                                                    name="imageName"
+                                                    onChange={handleFileChange}
+                                                    className="border p-2 w-full"
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={`${base_url}/api/v1/users/image/${u.imageName}`}
+                                                    className="h-16 w-16 object-cover rounded-full cursor-pointer"
+                                                    alt={`${u.imageName}`}
+                                                    onClick={() => openImageModal(u.imageName)}
+                                                />
+                                            )}
+                                        </td>
+                                            <td className="border border-gray-300 p-4">
+                                                {editId === u.id ? (
+                                                    <div className="flex space-x-2">
+                                                        <button
+                                                            className="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                                                            onClick={() => updateUserData(u.id)}
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
+                                                            onClick={() => setEditId(null)}
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                    
+                                                ) : (
+                                                        
+                                                    <div className="flex space-x-2">
+                                                        <button
+                                                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                                            onClick={() => handleEditClick(u)}
+                                                        >
+                                                            Update
+                                                        </button>
+                                                    
+                                                    {/* {u.roles?.[0]?.name === "ADMIN_USER" || u.authorities?.[0]?.authority === "ADMIN_USER" ? ( */}
+                                                        <button className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600" onClick={() => deleteUser(u.id)}>
+                                                            Delete
+                                                        </button>
+                                                    {/* ) : null} */}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="text-center p-4">
+                                            No data available
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                
                 {/* Modal for displaying the large image */}
                 {isModalOpen && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
                             <div className="p-4 rounded shadow-lg">
                                 <div className="relative bg-white">
                                     <button
@@ -334,14 +366,10 @@ const Home = () => {
                 )}
             </div>
 
-                            
-
-            
-
             {/* Pagination Controls */}
             {!searchQuery && (
                 <nav aria-label="Page navigation" className="text-center">
-                    <ul className="inline-flex -space-x-px text-base mt-10">
+                    <ul className="inline-flex -space-x-px text-base mt-5">
                         <li>
                             <button
                                 disabled={currentPage === 0}
